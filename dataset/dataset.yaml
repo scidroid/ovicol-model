@@ -1,0 +1,7 @@
+path: /Users/scidroid/ovicol/dataset  # dataset root dir
+train: images/train  # train images (relative to 'path')
+val: images/val  # val images (relative to 'path')
+test: images/test  # test images (relative to 'path')
+
+nc: 1  # number of classes
+names: ['bbox']  # class names
