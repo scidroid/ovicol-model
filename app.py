@@ -67,8 +67,8 @@ def merge_predictions(original_image, tiles_predictions, tile_positions):
 
     for pred, (x, y, x_end, y_end) in zip(tiles_predictions, tile_positions):
         if pred is not None and len(pred.boxes) > 0:
-            # Get the plotted tile with detections
-            plot = pred.plot()
+            # Get the plotted tile with detections, but without labels
+            plot = pred.plot(labels=False, conf=False)
             # Crop the plot to match the original tile size (remove padding if any)
             plot = plot[:y_end - y, :x_end - x]
             # Place the plot in the merged image
@@ -81,6 +81,11 @@ def merge_predictions(original_image, tiles_predictions, tile_positions):
 def process_image(image, model):
     """Process the image and return results"""
     try:
+        # Create a status container
+        status_container = st.empty()
+        progress_bar = st.progress(0)
+
+        status_container.text("Preparando imagen...")
         # Handle different image formats
         if image.shape[-1] == 4:
             image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
@@ -94,6 +99,8 @@ def process_image(image, model):
                                  cv2.COLOR_BGR2RGB)
 
         # Create tiles
+        status_container.text("Creando segmentos de imagen...")
+        progress_bar.progress(10)
         tiles, tile_positions = create_tiles(image)
 
         # Process each tile
@@ -101,38 +108,56 @@ def process_image(image, model):
         processed_tiles = []
         tile_detections = []
 
-        for tile in tiles:
+        total_tiles = len(tiles)
+        status_container.text("Procesando segmentos...")
+
+        for idx, tile in enumerate(tiles):
+            # Update progress
+            progress = int(
+                10 + (idx + 1) / total_tiles * 70)  # Progress from 10% to 80%
+            progress_bar.progress(progress)
+            status_container.text(
+                f"Procesando segmento {idx + 1}/{total_tiles}...")
+
             # Make prediction on tile
             results = model.predict(tile)
             result = results[0]
             tiles_predictions.append(result)
 
-            # Get processed tile
-            processed_tile = cv2.cvtColor(result.plot(), cv2.COLOR_BGR2RGB)
+            # Get processed tile without labels
+            processed_tile = cv2.cvtColor(
+                result.plot(labels=False, conf=False), cv2.COLOR_BGR2RGB)
             processed_tiles.append(processed_tile)
             tile_detections.append(len(result.boxes))
 
         # Merge predictions for full image
+        status_container.text("Combinando resultados...")
+        progress_bar.progress(90)
         processed_image, total_detections = merge_predictions(
             image, tiles_predictions, tile_positions)
         processed_image_rgb = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
 
+        # Complete the progress
+        progress_bar.progress(100)
+        status_container.empty()
+
         return processed_image_rgb, total_detections, processed_tiles, tile_detections, tile_positions
     except Exception as e:
-        st.error(f"Error processing image: {str(e)}")
+        st.error(f"Error al procesar la imagen: {str(e)}")
         return None, 0, [], [], []
 
 
 # Load the model
 try:
-    model = load_model()
-    st.success("Model loaded successfully! ✅")
+    with st.spinner("Cargando modelo..."):
+        model = load_model()
+        st.success("¡Modelo cargado exitosamente! ✅")
 except Exception as e:
-    st.error(f"Error loading model: {str(e)}")
+    st.error(f"Error al cargar el modelo: {str(e)}")
     st.stop()
 
 # File uploader
-uploaded_file = st.file_uploader("Choose an image...",
+uploaded_file = st.file_uploader("Selecciona una imagen...",
                                  type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
@@ -144,53 +169,49 @@ if uploaded_file is not None:
         image = Image.open(uploaded_file)
         # Convert to RGB mode
         image = image.convert('RGB')
-        col1.header("Original Image")
+        col1.header("Imagen Original")
         col1.image(image, use_column_width=True)
 
         # Process image
-        with st.spinner("Processing image..."):
-            # Convert PIL Image to numpy array
-            image_array = np.array(image)
+        image_array = np.array(image)
+        processed_image, num_detections, processed_tiles, tile_detections, tile_positions = process_image(
+            image_array, model)
 
-            # Process the image
-            processed_image, num_detections, processed_tiles, tile_detections, tile_positions = process_image(
-                image_array, model)
+        if processed_image is not None:
+            # Display results
+            col2.header("Imagen Procesada")
+            col2.image(processed_image, use_column_width=True)
 
-            if processed_image is not None:
-                # Display results
-                col2.header("Processed Image")
-                col2.image(processed_image, use_column_width=True)
+            # Display detection count with large, centered text
+            st.markdown(f"""
+            <h2 style='text-align: center; color: #1f77b4;'>
+                {num_detections} huevo{'s' if num_detections != 1 else ''} detectado{'s' if num_detections != 1 else ''}
+            </h2>
+            """,
+                        unsafe_allow_html=True)
 
-                # Display detection count with large, centered text
-                st.markdown(f"""
-                <h2 style='text-align: center; color: #1f77b4;'>
-                    Detected {num_detections} egg{'s' if num_detections != 1 else ''}
-                </h2>
-                """,
-                            unsafe_allow_html=True)
+            # Display individual tiles
+            st.header("Segmentos Individuales")
+            st.markdown("Cada segmento muestra sus detecciones individuales")
 
-                # Display individual tiles
-                st.header("Individual Tiles")
-                st.markdown("Each tile shows its individual detections")
+            # Calculate number of columns (aim for tiles of about 200px width)
+            page_width = 1000  # Approximate page width in pixels
+            tile_width = 200  # Desired display width for each tile
+            num_cols = min(4, len(processed_tiles))  # Maximum 4 columns
 
-                # Calculate number of columns (aim for tiles of about 200px width)
-                page_width = 1000  # Approximate page width in pixels
-                tile_width = 200  # Desired display width for each tile
-                num_cols = min(4, len(processed_tiles))  # Maximum 4 columns
-
-                # Create columns for tiles
-                for i in range(0, len(processed_tiles), num_cols):
-                    cols = st.columns(num_cols)
-                    for j in range(num_cols):
-                        if i + j < len(processed_tiles):
-                            with cols[j]:
-                                x, y, x_end, y_end = tile_positions[i + j]
-                                st.image(
-                                    processed_tiles[i + j],
-                                    caption=
-                                    f"Tile at ({x}, {y})\nDetected: {tile_detections[i + j]} eggs"
-                                )
+            # Create columns for tiles
+            for i in range(0, len(processed_tiles), num_cols):
+                cols = st.columns(num_cols)
+                for j in range(num_cols):
+                    if i + j < len(processed_tiles):
+                        with cols[j]:
+                            x, y, x_end, y_end = tile_positions[i + j]
+                            st.image(
+                                processed_tiles[i + j],
+                                caption=
+                                f"Segmento en ({x}, {y})\nDetectados: {tile_detections[i + j]} huevo{'s' if tile_detections[i + j] != 1 else ''}"
+                            )
 
     except Exception as e:
-        st.error(f"Error processing the image: {str(e)}")
-        st.info("Please try uploading a different image.")
+        st.error(f"Error al procesar la imagen: {str(e)}")
+        st.info("Por favor, intenta subir una imagen diferente.")
