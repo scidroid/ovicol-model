@@ -5,6 +5,3 @@ Pillow
 numpy
 requests
 tqdm
-supervision
-pathlib
-python-json 

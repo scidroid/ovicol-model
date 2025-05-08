@@ -3,9 +3,6 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
-import io
-import math
-
 # Configuration
 TILE_SIZE = 250
 OVERLAP_RATIO = 0.2

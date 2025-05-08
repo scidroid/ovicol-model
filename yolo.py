@@ -2,12 +2,10 @@ import os
 import json
 import random
 import shutil
-from pathlib import Path
 from tqdm import tqdm
 import cv2
 import numpy as np
 import requests
-import supervision as sv
 from ultralytics import YOLO
 
 # Configuration
