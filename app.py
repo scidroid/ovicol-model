@@ -5,7 +5,7 @@ from ultralytics import YOLO
 from PIL import Image
 # Configuration
 TILE_SIZE = 250
-OVERLAP_RATIO = 0.2
+OVERLAP_RATIO = 0
 
 # Set page config
 st.set_page_config(page_title="OviCol", page_icon="🥚", layout="wide")
@@ -24,19 +24,25 @@ def load_model():
 
 
 def create_tiles(image):
-    """Create tiles from the input image"""
+    """Create non-overlapping tiles from the input image"""
     height, width = image.shape[:2]
     tiles = []
     tile_positions = []
 
-    step_size = int(TILE_SIZE * (1 - OVERLAP_RATIO))
-    if step_size == 0:
-        step_size = TILE_SIZE
+    # With no overlap, step size equals tile size
+    step_size = TILE_SIZE
 
-    for y in range(0, height, step_size):
-        for x in range(0, width, step_size):
-            y_end = min(y + TILE_SIZE, height)
+    # Calculate number of tiles needed in each dimension
+    num_tiles_h = int(np.ceil(height / TILE_SIZE))
+    num_tiles_w = int(np.ceil(width / TILE_SIZE))
+
+    for i in range(num_tiles_h):
+        for j in range(num_tiles_w):
+            # Calculate tile boundaries
+            x = j * TILE_SIZE
+            y = i * TILE_SIZE
             x_end = min(x + TILE_SIZE, width)
+            y_end = min(y + TILE_SIZE, height)
 
             tile = image[y:y_end, x:x_end]
             current_height, current_width = tile.shape[:2]
