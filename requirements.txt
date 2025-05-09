@@ -5,5 +5,4 @@ Pillow
 numpy
 requests
 tqdm
-streamlit-cropperjs
-libglib2.0-0
+streamlit-cropper

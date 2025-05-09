@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
-from streamlit_cropperjs import st_cropperjs
-import io
+from streamlit_cropper import st_cropper
+
 # Configuration
 TILE_SIZE = 250
 OVERLAP_RATIO = 0
@@ -162,41 +162,40 @@ uploaded_file = st.file_uploader("Selecciona una imagen...",
 if uploaded_file is not None:
     try:
         # Read the uploaded image
-        image_bytes = uploaded_file.read()
+        image = Image.open(uploaded_file)
 
         # Add cropping functionality
-        cropped_image_bytes = st_cropperjs(pic=image_bytes,
-                                           btn_text="Recortar imagen",
-                                           key="image_cropper")
+        st.write("Ajusta el recorte de la imagen:")
+        cropped_image = st_cropper(image,
+                                   realtime_update=True,
+                                   box_color='#0000FF',
+                                   aspect_ratio=None)
 
-        if cropped_image_bytes:
-            # Convert cropped image bytes to PIL Image
-            image = Image.open(io.BytesIO(cropped_image_bytes))
-            # Convert to RGB mode
-            image = image.convert('RGB')
+        # Convert to RGB mode
+        cropped_image = cropped_image.convert('RGB')
 
-            # Process image
-            image_array = np.array(image)
-            processed_image, num_detections = process_image(image_array, model)
+        # Process image
+        image_array = np.array(cropped_image)
+        processed_image, num_detections = process_image(image_array, model)
 
-            if processed_image is not None:
-                # Display detection count with large, centered text
-                st.markdown(f"""
-                <h2 style='text-align: center; color: #1f77b4;'>
-                    {num_detections} huevo{'s' if num_detections != 1 else ''} detectado{'s' if num_detections != 1 else ''}
-                </h2>
-                """,
-                            unsafe_allow_html=True)
+        if processed_image is not None:
+            # Display detection count with large, centered text
+            st.markdown(f"""
+            <h2 style='text-align: center; color: #1f77b4;'>
+                {num_detections} huevo{'s' if num_detections != 1 else ''} detectado{'s' if num_detections != 1 else ''}
+            </h2>
+            """,
+                        unsafe_allow_html=True)
 
-                # Create columns for before/after images
-                col1, col2 = st.columns(2)
+            # Create columns for before/after images
+            col1, col2 = st.columns(2)
 
-                col1.header("Imagen Original")
-                col1.image(image, use_column_width=True)
+            col1.header("Imagen Original")
+            col1.image(cropped_image, use_column_width=True)
 
-                # Display results
-                col2.header("Imagen Procesada")
-                col2.image(processed_image, use_column_width=True)
+            # Display results
+            col2.header("Imagen Procesada")
+            col2.image(processed_image, use_column_width=True)
 
     except Exception as e:
         st.error(f"Error al procesar la imagen: {str(e)}")
