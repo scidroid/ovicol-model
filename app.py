@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
+from streamlit_cropperjs import st_cropperjs
+import io
 # Configuration
 TILE_SIZE = 250
 OVERLAP_RATIO = 0
@@ -111,16 +113,12 @@ def process_image(image, model):
 
         # Process each tile
         tiles_predictions = []
-        processed_tiles = []
-        tile_detections = []
-
         total_tiles = len(tiles)
         status_container.text("Procesando segmentos...")
 
         for idx, tile in enumerate(tiles):
             # Update progress
-            progress = int(
-                10 + (idx + 1) / total_tiles * 70)  # Progress from 10% to 80%
+            progress = int(10 + (idx + 1) / total_tiles * 70)
             progress_bar.progress(progress)
             status_container.text(
                 f"Procesando segmento {idx + 1}/{total_tiles}...")
@@ -129,12 +127,6 @@ def process_image(image, model):
             results = model.predict(tile)
             result = results[0]
             tiles_predictions.append(result)
-
-            # Get processed tile without labels
-            processed_tile = cv2.cvtColor(
-                result.plot(labels=False, conf=False), cv2.COLOR_BGR2RGB)
-            processed_tiles.append(processed_tile)
-            tile_detections.append(len(result.boxes))
 
         # Merge predictions for full image
         status_container.text("Combinando resultados...")
@@ -147,10 +139,11 @@ def process_image(image, model):
         progress_bar.progress(100)
         status_container.empty()
 
-        return processed_image_rgb, total_detections, processed_tiles, tile_detections, tile_positions
+        return processed_image_rgb, total_detections
+
     except Exception as e:
         st.error(f"Error al procesar la imagen: {str(e)}")
-        return None, 0, [], [], []
+        return None, 0
 
 
 # Load the model
@@ -168,55 +161,42 @@ uploaded_file = st.file_uploader("Selecciona una imagen...",
 
 if uploaded_file is not None:
     try:
-        # Create columns for before/after images
-        col1, col2 = st.columns(2)
+        # Read the uploaded image
+        image_bytes = uploaded_file.read()
 
-        # Read and display original image
-        image = Image.open(uploaded_file)
-        # Convert to RGB mode
-        image = image.convert('RGB')
-        col1.header("Imagen Original")
-        col1.image(image, use_column_width=True)
+        # Add cropping functionality
+        cropped_image_bytes = st_cropperjs(pic=image_bytes,
+                                           btn_text="Recortar imagen",
+                                           key="image_cropper")
 
-        # Process image
-        image_array = np.array(image)
-        processed_image, num_detections, processed_tiles, tile_detections, tile_positions = process_image(
-            image_array, model)
+        if cropped_image_bytes:
+            # Convert cropped image bytes to PIL Image
+            image = Image.open(io.BytesIO(cropped_image_bytes))
+            # Convert to RGB mode
+            image = image.convert('RGB')
 
-        if processed_image is not None:
-            # Display results
-            col2.header("Imagen Procesada")
-            col2.image(processed_image, use_column_width=True)
+            # Process image
+            image_array = np.array(image)
+            processed_image, num_detections = process_image(image_array, model)
 
-            # Display detection count with large, centered text
-            st.markdown(f"""
-            <h2 style='text-align: center; color: #1f77b4;'>
-                {num_detections} huevo{'s' if num_detections != 1 else ''} detectado{'s' if num_detections != 1 else ''}
-            </h2>
-            """,
-                        unsafe_allow_html=True)
+            if processed_image is not None:
+                # Display detection count with large, centered text
+                st.markdown(f"""
+                <h2 style='text-align: center; color: #1f77b4;'>
+                    {num_detections} huevo{'s' if num_detections != 1 else ''} detectado{'s' if num_detections != 1 else ''}
+                </h2>
+                """,
+                            unsafe_allow_html=True)
 
-            # Display individual tiles
-            st.header("Segmentos Individuales")
-            st.markdown("Cada segmento muestra sus detecciones individuales")
+                # Create columns for before/after images
+                col1, col2 = st.columns(2)
 
-            # Calculate number of columns (aim for tiles of about 200px width)
-            page_width = 1000  # Approximate page width in pixels
-            tile_width = 200  # Desired display width for each tile
-            num_cols = min(4, len(processed_tiles))  # Maximum 4 columns
+                col1.header("Imagen Original")
+                col1.image(image, use_column_width=True)
 
-            # Create columns for tiles
-            for i in range(0, len(processed_tiles), num_cols):
-                cols = st.columns(num_cols)
-                for j in range(num_cols):
-                    if i + j < len(processed_tiles):
-                        with cols[j]:
-                            x, y, x_end, y_end = tile_positions[i + j]
-                            st.image(
-                                processed_tiles[i + j],
-                                caption=
-                                f"Segmento en ({x}, {y})\nDetectados: {tile_detections[i + j]} huevo{'s' if tile_detections[i + j] != 1 else ''}"
-                            )
+                # Display results
+                col2.header("Imagen Procesada")
+                col2.image(processed_image, use_column_width=True)
 
     except Exception as e:
         st.error(f"Error al procesar la imagen: {str(e)}")
