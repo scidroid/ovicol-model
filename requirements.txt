@@ -5,3 +5,5 @@ numpy
 requests
 tqdm
 streamlit-cropper
+freeglut3-dev
+libgtk2.0-dev
